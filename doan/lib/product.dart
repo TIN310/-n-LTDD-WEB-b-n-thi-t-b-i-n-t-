@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
+// ==========================================
+// CÁC LỚP DỮ LIỆU (MODELS)
+// ==========================================
+
 class Product {
   final String id;
   final String name;
   final String price;
-  final int rawPrice; // Thêm giá trị số nguyên để dễ tính toán
+  final int rawPrice; // Lưu giá trị số (VD: 35990000) để dễ tính toán
   final String imageUrl;
   final String brand;
 
@@ -22,6 +26,7 @@ class Product {
 class CartItem {
   final Product product;
   int quantity;
+
   CartItem({required this.product, this.quantity = 1});
 }
 
@@ -33,6 +38,8 @@ class OrderData {
   final int earnedPoints;
   final String status;
   final String paymentMethod;
+  final String address; // ĐÃ THÊM: Địa chỉ giao hàng
+  final String note;    // ĐÃ THÊM: Ghi chú đơn hàng
 
   OrderData({
     required this.orderId,
@@ -41,6 +48,8 @@ class OrderData {
     required this.earnedPoints,
     required this.status,
     required this.paymentMethod,
+    required this.address, // Yêu cầu biến này
+    required this.note,    // Yêu cầu biến này
   });
 }
 
@@ -53,10 +62,12 @@ class AppData {
   static List<OrderData> history = [];
 
   // Thông tin User & Điểm
-  static int currentPoints = 0; // Điểm có thể dùng
-  static int lifetimePoints = 0; // Điểm xét hạng
+  static int currentPoints = 0;
+  static int lifetimePoints = 0;
 
-  // Lấy thông tin Cấp bậc hiện tại
+  // Lưu phần trăm Voucher đang áp dụng (Mặc định là 0)
+  static double appliedVoucherPercent = 0.0;
+
   static String get userTier {
     if (lifetimePoints >= 50000) return 'Kim cương';
     if (lifetimePoints >= 20000) return 'VIP';
@@ -64,7 +75,6 @@ class AppData {
     return 'Khách hàng';
   }
 
-  // Lấy Hệ số nhân điểm
   static double get tierMultiplier {
     if (lifetimePoints >= 50000) return 2.0;
     if (lifetimePoints >= 20000) return 1.5;
@@ -72,25 +82,28 @@ class AppData {
     return 1.0;
   }
 
-  // Lấy % Giảm giá theo hạng
   static double get discountPercent {
-    if (lifetimePoints >= 50000) return 0.12; // 12%
-    if (lifetimePoints >= 20000) return 0.08; // 8%
-    if (lifetimePoints >= 5000) return 0.05;  // 5%
-    return 0.0; // 0%
+    if (lifetimePoints >= 50000) return 0.12;
+    if (lifetimePoints >= 20000) return 0.08;
+    if (lifetimePoints >= 5000) return 0.05;
+    return 0.0;
   }
 
-  // Hàm thanh toán & Cộng điểm
-  static void processCheckout(String paymentMethod) {
+  // ĐÃ SỬA: Tính toán tiền ship 30k cứng và trừ thêm Voucher
+  static void processCheckout(String paymentMethod, String address, String note) {
     if (cart.isEmpty) return;
 
     int subtotal = cart.fold(0, (sum, item) => sum + (item.product.rawPrice * item.quantity));
-    int finalTotal = (subtotal * (1 - discountPercent)).round();
 
-    // Tính điểm: (Tổng tiền / 10.000) * Hệ số
+    int shippingFee = 30000; // Cố định ship 30k
+    int tierDiscountAmount = (subtotal * discountPercent).round();
+    int voucherDiscountAmount = (subtotal * appliedVoucherPercent).round();
+
+    // Thành tiền = Tạm tính - Ưu đãi hạng - Voucher + Phí Ship
+    int finalTotal = subtotal - tierDiscountAmount - voucherDiscountAmount + shippingFee;
+
     int earnedPoints = ((finalTotal / 10000).floor() * tierMultiplier).round();
 
-    // Lưu Lịch sử
     history.insert(0, OrderData(
       orderId: 'ORD${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
       items: List.from(cart),
@@ -98,18 +111,21 @@ class AppData {
       earnedPoints: earnedPoints,
       status: 'Chờ xác nhận',
       paymentMethod: paymentMethod,
+      address: address,
+      note: note,
     ));
 
-    // Cộng điểm
     currentPoints += earnedPoints;
     lifetimePoints += earnedPoints;
 
-    // Xóa giỏ hàng
     cart.clear();
+    appliedVoucherPercent = 0.0; // Reset lại voucher sau khi thanh toán xong
   }
 }
 
-// Cập nhật Dữ liệu mẫu (Thêm rawPrice)
+// ==========================================
+// DỮ LIỆU MẪU (MOCK DATA)
+// ==========================================
 final List<Product> mockProducts = [
   Product(id: '1', name: 'Laptop Gaming ROG Strix', price: '35.990.000 đ', rawPrice: 35990000, brand: 'Asus', imageUrl: 'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?auto=format&fit=crop&w=500&q=80'),
   Product(id: '2', name: 'Điện thoại Galaxy S24 Ultra', price: '29.490.000 đ', rawPrice: 29490000, brand: 'Samsung', imageUrl: 'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?auto=format&fit=crop&w=500&q=80'),
