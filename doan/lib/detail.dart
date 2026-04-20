@@ -11,32 +11,87 @@ class ProductDetailScreen extends StatefulWidget {
 }
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
+  // Biến trạng thái để tạo hiệu ứng loading
+  bool _isAddingToCart = false;
+
   bool get isFavorite => AppData.favorites.any((p) => p.id == widget.product.id);
 
   void toggleFavorite() {
     setState(() {
       if (isFavorite) {
         AppData.favorites.removeWhere((p) => p.id == widget.product.id);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã bỏ yêu thích')));
+        _showSmoothSnackBar('Đã bỏ yêu thích', Icons.heart_broken, Colors.grey);
       } else {
         AppData.favorites.add(widget.product);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã thêm vào yêu thích'), backgroundColor: Colors.pinkAccent));
+        _showSmoothSnackBar('Đã thêm vào yêu thích', Icons.favorite, Colors.pinkAccent);
       }
     });
   }
 
-  void addToCart() {
+  // Hàm Add To Cart mới: Có độ trễ mô phỏng mượt mà
+  Future<void> addToCart() async {
+    // Bật trạng thái loading
+    setState(() {
+      _isAddingToCart = true;
+    });
+
+    // Giả lập thời gian xử lý của hệ thống (0.5 giây)
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Thêm vào giỏ
     var existingItem = AppData.cart.where((item) => item.product.id == widget.product.id).firstOrNull;
-    if (existingItem != null) {
-      existingItem.quantity++;
-    } else {
-      AppData.cart.add(CartItem(product: widget.product));
-    }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Đã thêm ${widget.product.name} vào giỏ!'),
-      backgroundColor: Colors.green,
-      action: SnackBarAction(label: 'Xem giỏ', textColor: Colors.white, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()))),
-    ));
+    setState(() {
+      if (existingItem != null) {
+        existingItem.quantity++;
+      } else {
+        AppData.cart.add(CartItem(product: widget.product));
+      }
+      _isAddingToCart = false; // Tắt loading
+    });
+
+    // Hiển thị thông báo thành công
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(child: Text('Đã thêm ${widget.product.name} vào giỏ!', style: const TextStyle(fontWeight: FontWeight.bold))),
+            ],
+          ),
+          backgroundColor: Colors.green[600],
+          behavior: SnackBarBehavior.floating, // Thông báo nổi mượt mà
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), // Bo góc
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 2),
+          action: SnackBarAction(
+              label: 'XEM GIỎ',
+              textColor: Colors.white,
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()))
+          ),
+        )
+    );
+  }
+
+  // Hàm tái sử dụng để hiển thị SnackBar mượt cho các tác vụ khác
+  void _showSmoothSnackBar(String message, IconData icon, Color iconColor) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(icon, color: iconColor),
+              const SizedBox(width: 10),
+              Text(message, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          backgroundColor: Colors.grey[850],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 1),
+        )
+    );
   }
 
   @override
@@ -44,6 +99,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(), // Cuộn nảy mượt mà
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -58,7 +114,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ),
                 ),
                 Positioned(top: 50, left: 16, child: CircleAvatar(backgroundColor: Colors.black.withOpacity(0.5), child: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)))),
-                Positioned(top: 50, right: 16, child: CircleAvatar(backgroundColor: Colors.black.withOpacity(0.5), child: IconButton(icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: Colors.red), onPressed: toggleFavorite))),
+                Positioned(
+                    top: 50, right: 16,
+                    child: CircleAvatar(
+                        backgroundColor: Colors.black.withOpacity(0.5),
+                        child: IconButton(
+                          // Thêm AnimatedSwitcher để icon tim nảy lên khi bấm
+                          icon: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 300),
+                            transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+                            child: Icon(
+                              isFavorite ? Icons.favorite : Icons.favorite_border,
+                              key: ValueKey<bool>(isFavorite), // Bắt buộc phải có key để nhận diện sự thay đổi
+                              color: isFavorite ? Colors.pinkAccent : Colors.white,
+                            ),
+                          ),
+                          onPressed: toggleFavorite,
+                        )
+                    )
+                ),
               ],
             ),
             Padding(
@@ -84,7 +158,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         color: Colors.grey[900],
         child: Row(
           children: [
-            Expanded(child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red, padding: const EdgeInsets.symmetric(vertical: 16)), onPressed: addToCart, child: const Text('THÊM VÀO GIỎ / MUA NGAY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))),
+            Expanded(
+                child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)) // Bo tròn nút
+                    ),
+                    onPressed: _isAddingToCart ? null : addToCart, // Khóa nút khi đang loading
+                    child: _isAddingToCart
+                        ? const SizedBox(
+                        height: 20, width: 20,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)
+                    ) // Hiện vòng xoay loading
+                        : const Text('THÊM VÀO GIỎ / MUA NGAY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))
+                )
+            ),
           ],
         ),
       ),

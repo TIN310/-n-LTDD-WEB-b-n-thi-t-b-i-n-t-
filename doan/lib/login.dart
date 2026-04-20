@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // Đã thêm import Supabase
 import 'Home.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -52,23 +53,43 @@ class _LoginFormState extends State<LoginForm> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  void _login() {
+  // ĐÃ SỬA: Hàm đăng nhập thật với Supabase
+  Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đăng nhập thành công!'), backgroundColor: Colors.green),
-      );
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+      try {
+        // Hiện loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đang xác thực...')),
+        );
+
+        // Gọi API Đăng nhập
+        final AuthResponse res = await Supabase.instance.client.auth.signInWithPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+
+        if (!mounted) return; // Tránh lỗi khi context bị hủy
+
+        if (res.user != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đăng nhập thành công!'), backgroundColor: Colors.green),
+          );
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sai email hoặc mật khẩu! Vui lòng thử lại.'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
-  // MÔ PHỎNG LUỒNG ĐĂNG NHẬP MẠNG XÃ HỘI & BẮT NHẬP SĐT
+  // Tạm thời giữ nguyên form mô phỏng cho MXH
   void _handleSocialLogin(String providerName) {
-    // 1. GỌI API GOOGLE/FACEBOOK Ở ĐÂY (Giả lập là đã lấy được thông tin email, tên)
-
-    // 2. HIỂN THỊ BẢNG YÊU CẦU NHẬP SĐT ĐỂ HOÀN TẤT HỒ SƠ
     showDialog(
       context: context,
-      barrierDismissible: false, // Bắt buộc phải nhập, không cho bấm ra ngoài tắt
+      barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         final phoneFormKey = GlobalKey<FormState>();
         final phoneController = TextEditingController();
@@ -105,14 +126,13 @@ class _LoginFormState extends State<LoginForm> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext), // Hủy bỏ
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               onPressed: () {
                 if (phoneFormKey.currentState!.validate()) {
-                  // Đã nhập đúng -> Đóng Dialog & Chuyển vào Home
                   Navigator.pop(dialogContext);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Liên kết SĐT thành công!'), backgroundColor: Colors.green),
@@ -152,9 +172,9 @@ class _LoginFormState extends State<LoginForm> {
               TextFormField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(labelText: "Email / Số điện thoại", prefixIcon: const Icon(Icons.email, color: Colors.red), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
+                decoration: InputDecoration(labelText: "Email", prefixIcon: const Icon(Icons.email, color: Colors.red), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
                 validator: (value) {
-                  if (value == null || value.isEmpty) return 'Vui lòng nhập email hoặc số điện thoại';
+                  if (value == null || value.isEmpty) return 'Vui lòng nhập email';
                   return null;
                 },
               ),
@@ -211,7 +231,7 @@ class _LoginFormState extends State<LoginForm> {
 
   Widget _buildSocialButton(IconData icon, Color color, String name) {
     return InkWell(
-      onTap: () => _handleSocialLogin(name), // Gọi hàm xử lý Social Login
+      onTap: () => _handleSocialLogin(name),
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.grey.withOpacity(0.3))),
@@ -249,20 +269,42 @@ class _RegisterFormState extends State<RegisterForm> {
   bool _isObscure = true;
   bool _isObscureConfirm = true;
 
+  // ĐÃ THÊM: Biến điều khiển trường nhập Email (bản cũ bạn quên mất)
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  void _register() {
+  // ĐÃ SỬA: Hàm đăng ký thật đẩy dữ liệu lên Supabase
+  Future<void> _register() async {
     if (_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tạo tài khoản thành công! Đang đăng nhập...'), backgroundColor: Colors.green),
-      );
-      Future.delayed(const Duration(seconds: 1), () {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-              (route) => false,
+      try {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đang tạo tài khoản...')),
         );
-      });
+
+        // Gọi API Tạo tài khoản
+        final AuthResponse res = await Supabase.instance.client.auth.signUp(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+
+        if (!mounted) return;
+
+        if (res.user != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Tạo tài khoản thành công! Đang đăng nhập...'), backgroundColor: Colors.green),
+          );
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+                (route) => false,
+          );
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi đăng ký: ${e.toString()}'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -287,6 +329,7 @@ class _RegisterFormState extends State<RegisterForm> {
               const SizedBox(height: 15),
 
               TextFormField(
+                controller: _emailController, // ĐÃ GẮN CONTROLLER VÀO ĐÂY
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(labelText: "Email", prefixIcon: const Icon(Icons.email, color: Colors.red), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
                 validator: (val) {
@@ -297,13 +340,11 @@ class _RegisterFormState extends State<RegisterForm> {
               ),
               const SizedBox(height: 15),
 
-              // TRƯỜNG NHẬP SỐ ĐIỆN THOẠI MỚI THÊM
               TextFormField(
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(labelText: "Số điện thoại", prefixIcon: const Icon(Icons.phone, color: Colors.red), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
                 validator: (val) {
                   if (val == null || val.isEmpty) return 'Vui lòng nhập SĐT';
-                  // Kiểm tra SĐT nhà mạng VN (10 số, bắt đầu bằng 03, 05, 07, 08, 09)
                   if (!RegExp(r'^(0|\+84)[3|5|7|8|9][0-9]{8}$').hasMatch(val)) {
                     return 'SĐT không hợp lệ (VD: 0912345678)';
                   }
