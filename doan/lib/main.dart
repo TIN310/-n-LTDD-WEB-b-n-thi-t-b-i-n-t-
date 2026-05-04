@@ -1,7 +1,18 @@
 import 'package:flutter/material.dart';
-import 'login.dart'; // Đã sửa theo tên file của bạn
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'login.dart';
 
-void main() {
+// ✅ main phải là async để dùng await
+Future<void> main() async {
+  // ✅ Bắt buộc gọi trước khi dùng bất kỳ Flutter API nào
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ Khởi tạo Supabase - thay 2 giá trị bên dưới bằng thông tin project của bạn
+  await Supabase.initialize(
+    url: 'https://lckagidapvvcwwqnhbzf.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxja2FnaWRhcHZ2Y3d3cW5oYnpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3OTE0NjAsImV4cCI6MjA5MzM2NzQ2MH0.FjZ1St_q45nIRJgdhSWfqnSMN2RMdi9QpSzhQ8kKXIw',
+  );
+
   runApp(const MyApp());
 }
 
