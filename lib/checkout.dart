@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'product.dart';
-import '../services/app_data.dart';
+import 'services/app_data.dart'; // ĐÃ SỬA LỖI ĐƯỜNG DẪN Ở ĐÂY
+
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
 
@@ -425,6 +426,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
 
     try {
+      // HÀM CHỈ CÒN ĐÚNG 3 THAM SỐ KHỚP VỚI BẢN CẬP NHẬT MỚI NHẤT
       await AppData.processCheckout(
         selectedPaymentMethod,
         selectedAddress,
