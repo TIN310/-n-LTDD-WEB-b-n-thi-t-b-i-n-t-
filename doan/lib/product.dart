@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ==========================================
 // CÁC LỚP DỮ LIỆU (MODELS)
@@ -90,8 +89,8 @@ class AppData {
     return 0.0;
   }
 
-  // ĐÃ SỬA: Tính toán tiền ship 30k cứng và trừ thêm Voucher + Gửi lên Supabase
-  static Future<void> processCheckout(String paymentMethod, String address, String note) async {
+  // ĐÃ SỬA: Tính toán tiền ship 30k cứng và trừ thêm Voucher
+  static void processCheckout(String paymentMethod, String address, String note) {
     if (cart.isEmpty) return;
 
     int subtotal = cart.fold(0, (sum, item) => sum + (item.product.rawPrice * item.quantity));
@@ -104,10 +103,9 @@ class AppData {
     int finalTotal = subtotal - tierDiscountAmount - voucherDiscountAmount + shippingFee;
 
     int earnedPoints = ((finalTotal / 10000).floor() * tierMultiplier).round();
-    final orderId = 'ORD${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
     history.insert(0, OrderData(
-      orderId: orderId,
+      orderId: 'ORD${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
       items: List.from(cart),
       totalAmount: finalTotal,
       earnedPoints: earnedPoints,
@@ -116,18 +114,6 @@ class AppData {
       address: address,
       note: note,
     ));
-
-    try {
-      await Supabase.instance.client.from('orders').insert({
-        'id': orderId,
-        'user_id': Supabase.instance.client.auth.currentUser?.id ?? 'guest',
-        'status': 'Chờ xác nhận',
-        'total_price': finalTotal,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      debugPrint('Lỗi lưu đơn hàng lên Supabase: $e');
-    }
 
     currentPoints += earnedPoints;
     lifetimePoints += earnedPoints;

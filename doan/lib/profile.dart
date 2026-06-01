@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login.dart';
 import 'product.dart';
 import 'history.dart';
@@ -365,14 +364,7 @@ class _VipProfileScreenState extends State<VipProfileScreen> {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: () async {
-          try {
-            await Supabase.instance.client.auth.signOut();
-          } catch (e) {
-            // Nếu signOut thất bại, vẫn tiếp tục điều hướng về LoginScreen
-            debugPrint('signOut error: $e');
-          }
-          if (!context.mounted) return;
+        onPressed: () {
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => const LoginScreen()),

@@ -88,8 +88,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  void _placeOrder() async {
-    await AppData.processCheckout(selectedPaymentMethod, selectedAddress, _noteController.text);
+  void _placeOrder() {
+    AppData.processCheckout(selectedPaymentMethod, selectedAddress, _noteController.text);
     showDialog(
       context: context,
       barrierDismissible: false,

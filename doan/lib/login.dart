@@ -1,30 +1,44 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'app_router.dart';
+import 'Home.dart';
 
-// ==========================================
-// MÀN HÌNH ĐĂNG NHẬP
-// ==========================================
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text(
-          "ELECTRO STORE",
-          style: TextStyle(
-            color: Colors.red,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.5,
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          title: const Text(
+            "ELECTRO STORE",
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+            ),
+          ),
+          centerTitle: true,
+          bottom: const TabBar(
+            indicatorColor: Colors.red,
+            labelColor: Colors.red,
+            unselectedLabelColor: Colors.grey,
+            tabs: [
+              Tab(icon: Icon(Icons.person), text: "Người dùng"),
+              Tab(icon: Icon(Icons.admin_panel_settings), text: "Nhân viên"),
+            ],
           ),
         ),
-        centerTitle: true,
+        body: const TabBarView(
+          children: [
+            LoginForm(role: "Người dùng"),
+            LoginForm(role: "Nhân viên"),
+          ],
+        ),
       ),
-      body: const LoginForm(),
     );
   }
 }
@@ -33,7 +47,8 @@ class LoginScreen extends StatelessWidget {
 // FORM ĐĂNG NHẬP
 // ==========================================
 class LoginForm extends StatefulWidget {
-  const LoginForm({super.key});
+  final String role;
+  const LoginForm({super.key, required this.role});
 
   @override
   State<LoginForm> createState() => _LoginFormState();
@@ -50,25 +65,14 @@ class _LoginFormState extends State<LoginForm> {
   @override
   void initState() {
     super.initState();
+    // ✅ Khi Supabase nhận được token từ deep link OAuth, tự động điều hướng
     _authSubscription =
-        Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
-          print('=== AUTH EVENT: ${data.event} ===');
-          final session = data.session;
-          if (session != null) {
-            if (data.event == AuthChangeEvent.initialSession ||
-                data.event == AuthChangeEvent.signedIn) {
-              try {
-                final role = await AppRouter.fetchUserRole();
-                if (mounted) {
-                  // Đợi UI render xong mới chuyển trang để tránh lỗi
-                  Future.microtask(() {
-                    AppRouter.navigateByRole(context, role);
-                  });
-                }
-              } catch (e) {
-                print('=== LỖI ĐIỀU HƯỚNG: $e ===');
-              }
-            }
+        Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+          if (data.event == AuthChangeEvent.signedIn && mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+            );
           }
         });
   }
@@ -104,10 +108,10 @@ class _LoginFormState extends State<LoginForm> {
               backgroundColor: Colors.green,
             ),
           );
-          final role = await AppRouter.fetchUserRole();
-          if (mounted) {
-            await AppRouter.navigateByRole(context, role);
-          }
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
         }
       } catch (e) {
         if (!mounted) return;
@@ -162,6 +166,8 @@ class _LoginFormState extends State<LoginForm> {
 
   @override
   Widget build(BuildContext context) {
+    bool isStaff = widget.role == "Nhân viên";
+
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -180,9 +186,9 @@ class _LoginFormState extends State<LoginForm> {
                 ),
               ),
               const SizedBox(height: 10),
-              const Text(
-                "Đăng nhập",
-                style: TextStyle(
+              Text(
+                "Đăng nhập ${widget.role}",
+                style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
@@ -207,6 +213,21 @@ class _LoginFormState extends State<LoginForm> {
                 },
               ),
               const SizedBox(height: 20),
+
+              if (isStaff) ...[
+                TextFormField(
+                  decoration: InputDecoration(
+                    labelText: "Mã nhân viên",
+                    prefixIcon: const Icon(Icons.badge, color: Colors.red),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  validator: (value) =>
+                  value!.isEmpty ? 'Vui lòng nhập mã nhân viên' : null,
+                ),
+                const SizedBox(height: 20),
+              ],
 
               TextFormField(
                 controller: _passwordController,
@@ -250,37 +271,39 @@ class _LoginFormState extends State<LoginForm> {
               ),
               const SizedBox(height: 20),
 
-              // Nút đăng nhập mạng xã hội (hiện cho tất cả người dùng)
-              const Text(
-                "Hoặc đăng nhập bằng",
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildSocialButton(
-                    Icons.g_mobiledata,
-                    Colors.white,
-                    'Google',
-                    _loginGoogle,
-                  ),
-                  const SizedBox(width: 20),
-                  _buildSocialButton(
-                    Icons.facebook,
-                    Colors.blue,
-                    'Facebook',
-                    _loginFacebook,
-                  ),
-                ],
-              ),
+              // Nút đăng nhập mạng xã hội (chỉ hiện cho tab Người dùng)
+              if (!isStaff) ...[
+                const Text(
+                  "Hoặc đăng nhập bằng",
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildSocialButton(
+                      Icons.g_mobiledata,
+                      Colors.white,
+                      'Google',
+                      _loginGoogle,
+                    ),
+                    const SizedBox(width: 20),
+                    _buildSocialButton(
+                      Icons.facebook,
+                      Colors.blue,
+                      'Facebook',
+                      _loginFacebook,
+                    ),
+                  ],
+                ),
+              ],
 
               const SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const RegisterScreen(),
+                    builder: (_) => RegisterScreen(role: widget.role),
                   ),
                 ),
                 child: const Text(
@@ -322,13 +345,14 @@ class _LoginFormState extends State<LoginForm> {
 // MÀN HÌNH & FORM ĐĂNG KÝ
 // ==========================================
 class RegisterScreen extends StatelessWidget {
-  const RegisterScreen({super.key});
+  final String role;
+  const RegisterScreen({super.key, required this.role});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Đăng ký tài khoản"),
+        title: Text("Đăng ký ${role.toLowerCase()}"),
         backgroundColor: Colors.black,
       ),
       body: const RegisterForm(),
@@ -380,8 +404,11 @@ class _RegisterFormState extends State<RegisterForm> {
               backgroundColor: Colors.green,
             ),
           );
-          // Người đăng ký mới luôn là 'user'
-          await AppRouter.navigateByRole(context, 'user');
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+                (route) => false,
+          );
         }
       } catch (e) {
         if (!mounted) return;
