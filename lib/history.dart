@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'product.dart'; // Nơi chứa AppData và thông tin Đơn hàng
-
+import '../services/app_data.dart';
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
 

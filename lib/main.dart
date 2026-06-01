@@ -1,14 +1,11 @@
-import 'package:doan/Home.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login.dart';
+import 'checkout.dart';
 
-// ✅ main phải là async để dùng await
 Future<void> main() async {
-  // ✅ Bắt buộc gọi trước khi dùng bất kỳ Flutter API nào
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ Khởi tạo Supabase - thay 2 giá trị bên dưới bằng thông tin project của bạn
   await Supabase.initialize(
     url: 'https://yuirveasmxdzngbijwaa.supabase.co',
     anonKey: 'sb_publishable_ectBcM06I8wOk4bvDEMLNA_Q-Gj1FJI',
@@ -34,12 +31,6 @@ class MyApp extends StatelessWidget {
           foregroundColor: Colors.white,
           elevation: 0,
         ),
-        textTheme: const TextTheme(
-          bodyLarge: TextStyle(color: Colors.white),
-          bodyMedium: TextStyle(color: Colors.white70),
-          titleLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          titleMedium: TextStyle(color: Colors.white),
-        ),
         colorScheme: ColorScheme.dark(
           primary: Colors.red,
           secondary: const Color(0xFFEF5350),
@@ -50,6 +41,9 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: const LoginScreen(),
+      routes: {
+        '/checkout': (context) => const CheckoutScreen(),
+      },
     );
   }
 }
