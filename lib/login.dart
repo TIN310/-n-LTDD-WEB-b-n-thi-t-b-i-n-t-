@@ -2,7 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'Home.dart';
+//
+// import 'staff_dashboard.dart';
 
+// ==========================================
+// MÀN HÌNH ĐĂNG NHẬP (2 TAB)
+// ==========================================
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
@@ -57,6 +62,10 @@ class LoginForm extends StatefulWidget {
 class _LoginFormState extends State<LoginForm> {
   final _formKey = GlobalKey<FormState>();
   bool _isObscure = true;
+  bool _isLoading = false;
+
+  // [SỬA] Xóa StreamSubscription OAuth - chuyển sang _navigateByRole()
+  // để tránh conflict với _login() và xử lý role đúng cách
   StreamSubscription<AuthState>? _authSubscription;
 
   final TextEditingController _emailController = TextEditingController();
@@ -65,15 +74,17 @@ class _LoginFormState extends State<LoginForm> {
   @override
   void initState() {
     super.initState();
+
+    // [SỬA] Listener chỉ dùng cho OAuth (Google/Facebook)
+    // Đọc role từ DB trước khi điều hướng
     _authSubscription =
-        Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-          if (data.event == AuthChangeEvent.signedIn && mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const HomeScreen()),
-            );
-          }
-        });
+        Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+      if (data.event == AuthChangeEvent.signedIn && mounted) {
+        final user = data.session?.user;
+        if (user == null) return;
+        await _navigateByRole(user.id);
+      }
+    });
   }
 
   @override
@@ -84,15 +95,68 @@ class _LoginFormState extends State<LoginForm> {
     super.dispose();
   }
 
+  // [MỚI] Hàm dùng chung: đọc vaitro từ DB rồi điều hướng
+  Future<void> _navigateByRole(String userId) async {
+    try {
+      // Lấy email từ session hiện tại
+      final userEmail = Supabase.instance.client.auth.currentUser?.email;
+      if (userEmail == null) return;
+
+      // [SỬA] Query bằng email thay vì id
+      final data = await Supabase.instance.client
+          .from('nguoidung')
+          .select('vaitro')
+          .eq('email', userEmail)  // ← đổi từ 'id' sang 'email'
+          .single();
+
+      final String roleFromDB = data['vaitro'] ?? 'User';
+
+      // [SỬA] Kiểm tra: tab "Nhân viên" chỉ cho tài khoản Staff đăng nhập
+      if (widget.role == "Nhân viên" && roleFromDB != "Staff") {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tài khoản này không có quyền nhân viên!'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        await Supabase.instance.client.auth.signOut();
+        return;
+      }
+
+      if (!mounted) return;
+
+      // [SỬA] Điều hướng theo role thay vì luôn về HomeScreen
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => roleFromDB == "Staff"
+              ? const HomeScreen() //TODO: chuyển thành hàm của staff_dashboard
+              : const HomeScreen(),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi kiểm tra quyền: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      await Supabase.instance.client.auth.signOut();
+    }
+  }
+
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
+      setState(() => _isLoading = true);
       try {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Đang xác thực...')),
         );
 
         final AuthResponse res =
-        await Supabase.instance.client.auth.signInWithPassword(
+            await Supabase.instance.client.auth.signInWithPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
@@ -106,21 +170,20 @@ class _LoginFormState extends State<LoginForm> {
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-          );
+          // [SỬA] Dùng _navigateByRole thay vì navigate thẳng
+          await _navigateByRole(res.user!.id);
         }
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            // ĐÃ SỬA: Hiển thị nguyên văn lỗi từ Supabase để bắt bệnh
             content: Text('Lỗi: ${e.toString()}'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5), // Hiện lâu hơn để kịp đọc
+            duration: const Duration(seconds: 5),
           ),
         );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -131,6 +194,7 @@ class _LoginFormState extends State<LoginForm> {
         OAuthProvider.google,
         redirectTo: 'electrostore://login-callback/',
       );
+      // Điều hướng sẽ được xử lý bởi _authSubscription listener
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -148,6 +212,7 @@ class _LoginFormState extends State<LoginForm> {
         OAuthProvider.facebook,
         redirectTo: 'electrostore://login-callback/',
       );
+      // Điều hướng sẽ được xử lý bởi _authSubscription listener
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -209,6 +274,7 @@ class _LoginFormState extends State<LoginForm> {
               ),
               const SizedBox(height: 20),
 
+              // [GIỮ NGUYÊN] Field mã nhân viên cho tab Staff
               if (isStaff) ...[
                 TextFormField(
                   decoration: InputDecoration(
@@ -219,7 +285,7 @@ class _LoginFormState extends State<LoginForm> {
                     ),
                   ),
                   validator: (value) =>
-                  value!.isEmpty ? 'Vui lòng nhập mã nhân viên' : null,
+                      value!.isEmpty ? 'Vui lòng nhập mã nhân viên' : null,
                 ),
                 const SizedBox(height: 20),
               ],
@@ -243,29 +309,34 @@ class _LoginFormState extends State<LoginForm> {
                   ),
                 ),
                 validator: (value) =>
-                (value == null || value.isEmpty)
-                    ? 'Vui lòng nhập mật khẩu'
-                    : null,
+                    (value == null || value.isEmpty)
+                        ? 'Vui lòng nhập mật khẩu'
+                        : null,
               ),
 
               const SizedBox(height: 30),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                onPressed: _login,
-                child: const Text(
-                  "ĐĂNG NHẬP",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
+
+              // [SỬA] Thêm loading indicator khi đang xử lý
+              _isLoading
+                  ? const CircularProgressIndicator(color: Colors.red)
+                  : ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        minimumSize: const Size(double.infinity, 50),
+                      ),
+                      onPressed: _login,
+                      child: const Text(
+                        "ĐĂNG NHẬP",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
               const SizedBox(height: 20),
 
+              // [GIỮ NGUYÊN] Chỉ hiện OAuth cho tab Người dùng
               if (!isStaff) ...[
                 const Text(
                   "Hoặc đăng nhập bằng",
@@ -293,21 +364,24 @@ class _LoginFormState extends State<LoginForm> {
               ],
 
               const SizedBox(height: 10),
-              TextButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => RegisterScreen(role: widget.role),
+
+              // [SỬA] Ẩn nút đăng ký ở tab Nhân viên
+              if (!isStaff)
+                TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RegisterScreen(role: widget.role),
+                    ),
+                  ),
+                  child: const Text(
+                    "Chưa có tài khoản? Đăng ký ngay",
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                child: const Text(
-                  "Chưa có tài khoản? Đăng ký ngay",
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -316,11 +390,11 @@ class _LoginFormState extends State<LoginForm> {
   }
 
   Widget _buildSocialButton(
-      IconData icon,
-      Color color,
-      String name,
-      VoidCallback onTap,
-      ) {
+    IconData icon,
+    Color color,
+    String name,
+    VoidCallback onTap,
+  ) {
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -366,6 +440,7 @@ class _RegisterFormState extends State<RegisterForm> {
   final _formKey = GlobalKey<FormState>();
   bool _isObscure = true;
   bool _isObscureConfirm = true;
+  bool _isLoading = false;
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -383,14 +458,15 @@ class _RegisterFormState extends State<RegisterForm> {
 
   Future<void> _register() async {
     if (_formKey.currentState!.validate()) {
+      setState(() => _isLoading = true);
       try {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Đang tạo tài khoản...')),
         );
 
-        // 1. Tạo tài khoản trên Supabase Auth
+        // Bước 1: Tạo tài khoản trên Supabase Auth
         final AuthResponse res =
-        await Supabase.instance.client.auth.signUp(
+            await Supabase.instance.client.auth.signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
@@ -398,18 +474,22 @@ class _RegisterFormState extends State<RegisterForm> {
         if (!mounted) return;
 
         if (res.user != null) {
-          // 2. LƯU DỮ LIỆU VÀO BẢNG NGUOIDUNG TRÊN DATABASE
           String roleToSave = widget.role == "Nhân viên" ? "Staff" : "User";
 
+          // Bước 2: Lưu thông tin vào bảng nguoidung
+          // [SỬA] Thêm 'id' để liên kết với Supabase Auth
+          // [SỬA] Xóa 'matkhau' - không lưu mật khẩu plaintext
           await Supabase.instance.client.from('nguoidung').insert({
+            'id': res.user!.id,
             'hoten': _nameController.text.trim(),
             'vaitro': roleToSave,
-            'matkhau': _passwordController.text,
             'taikhoan': _emailController.text.trim().split('@')[0],
             'email': _emailController.text.trim(),
             'sdt': _phoneController.text.trim(),
             'ngaytao': DateTime.now().toIso8601String(),
           });
+
+          if (!mounted) return;
 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -417,10 +497,16 @@ class _RegisterFormState extends State<RegisterForm> {
               backgroundColor: Colors.green,
             ),
           );
+
+          // [SỬA] Điều hướng theo role thay vì luôn về HomeScreen
           Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-                (route) => false,
+            MaterialPageRoute(
+              builder: (_) => roleToSave == "Staff"
+                  ? const HomeScreen() // TODO: chuyển thành hàm của staff_dashboard
+                  : const HomeScreen(),
+            ),
+            (route) => false,
           );
         }
       } catch (e) {
@@ -431,6 +517,8 @@ class _RegisterFormState extends State<RegisterForm> {
             backgroundColor: Colors.red,
           ),
         );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -462,7 +550,7 @@ class _RegisterFormState extends State<RegisterForm> {
                   ),
                 ),
                 validator: (val) =>
-                val!.isEmpty ? 'Vui lòng nhập họ tên' : null,
+                    val!.isEmpty ? 'Vui lòng nhập họ tên' : null,
               ),
               const SizedBox(height: 15),
 
@@ -545,7 +633,7 @@ class _RegisterFormState extends State<RegisterForm> {
                 decoration: InputDecoration(
                   labelText: "Xác nhận mật khẩu",
                   prefixIcon:
-                  const Icon(Icons.lock_outline, color: Colors.red),
+                      const Icon(Icons.lock_outline, color: Colors.red),
                   suffixIcon: IconButton(
                     icon: Icon(
                       _isObscureConfirm
@@ -572,21 +660,24 @@ class _RegisterFormState extends State<RegisterForm> {
               ),
               const SizedBox(height: 30),
 
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                onPressed: _register,
-                child: const Text(
-                  "ĐĂNG KÝ",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
+              // [SỬA] Thêm loading indicator khi đang xử lý
+              _isLoading
+                  ? const CircularProgressIndicator(color: Colors.red)
+                  : ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        minimumSize: const Size(double.infinity, 50),
+                      ),
+                      onPressed: _register,
+                      child: const Text(
+                        "ĐĂNG KÝ",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
               const SizedBox(height: 15),
               TextButton(
                 onPressed: () => Navigator.pop(context),
