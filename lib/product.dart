@@ -26,14 +26,25 @@ class Product {
           (Match m) => '${m[1]}.',
     )} đ';
 
-    String img =
-        'https://picsum.photos/seed/${json['masp']}/500/500';
+    // Ảnh mặc định nếu sản phẩm không có ảnh
+    String img = 'https://picsum.photos/seed/${json['masp']}/500/500';
+
+    // Lấy ảnh thật từ bảng hinhanhsp (Supabase sẽ trả về dạng List)
+    if (json['hinhanhsp'] != null && json['hinhanhsp'] is List && (json['hinhanhsp'] as List).isNotEmpty) {
+      String urlAnh = (json['hinhanhsp'] as List)[0]['urlanh']?.toString() ?? '';
+      if (urlAnh.isNotEmpty) {
+        // LƯU Ý: Nếu ảnh trong CSDL chỉ là tên file (vd: sp1.jpg),
+        // bạn cần nối thêm đường dẫn Storage của Supabase vào đây.
+        // Ví dụ: img = 'https://yuirveasmxdzngbijwaa.supabase.co/storage/v1/object/public/TenBucketCuaBan/$urlAnh';
+
+        // Tạm thời nếu trong SQL của bạn là link thì gán luôn:
+        // img = urlAnh;
+      }
+    }
 
     String tenLoai = 'Chưa rõ';
-
     if (json['loaisanpham'] != null) {
-      tenLoai =
-          json['loaisanpham']['tenloai'] ?? 'Chưa rõ';
+      tenLoai = json['loaisanpham']['tenloai'] ?? 'Chưa rõ';
     }
 
     return Product(
@@ -113,51 +124,3 @@ class ProductReview {
     required this.createdAt,
   });
 }
-
-final List<Product> mockProducts = [
-  Product(
-    id: '1',
-    name: 'Laptop Gaming ROG Strix',
-    price: '35.990.000 đ',
-    rawPrice: 35990000,
-    brand: 'Asus',
-    imageUrl:
-    'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?auto=format&fit=crop&w=500&q=80',
-  ),
-  Product(
-    id: '2',
-    name: 'Điện thoại Galaxy S24 Ultra',
-    price: '29.490.000 đ',
-    rawPrice: 29490000,
-    brand: 'Samsung',
-    imageUrl:
-    'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?auto=format&fit=crop&w=500&q=80',
-  ),
-  Product(
-    id: '3',
-    name: 'Tai nghe Bluetooth Chống ồn',
-    price: '4.500.000 đ',
-    rawPrice: 4500000,
-    brand: 'Sony',
-    imageUrl:
-    'https://images.unsplash.com/photo-1618366712010-f4ae9c647dcb?auto=format&fit=crop&w=500&q=80',
-  ),
-  Product(
-    id: '4',
-    name: 'Bàn phím cơ MX',
-    price: '2.100.000 đ',
-    rawPrice: 2100000,
-    brand: 'Logitech',
-    imageUrl:
-    'https://images.unsplash.com/photo-1595225476474-87563907a212?auto=format&fit=crop&w=500&q=80',
-  ),
-  Product(
-    id: '5',
-    name: 'Màn hình 27 inch 4K',
-    price: '12.000.000 đ',
-    rawPrice: 12000000,
-    brand: 'LG',
-    imageUrl:
-    'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=500&q=80',
-  ),
-];

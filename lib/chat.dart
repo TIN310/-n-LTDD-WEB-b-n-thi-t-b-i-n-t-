@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'product.dart'; // Nạp dữ liệu sản phẩm
-import 'screens/detail.dart';  // Để bấm vào sản phẩm thì chuyển sang trang chi tiết
+import 'screens/detail.dart';  // Chuyển trang chi tiết
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -13,17 +14,53 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  // Danh sách tin nhắn giờ đây hỗ trợ chứa cả List sản phẩm
+  // Danh sách sản phẩm thật tải từ Supabase
+  List<Product> _realProducts = [];
+  bool _isLoadingProducts = true;
+
   final List<Map<String, dynamic>> _messages = [
     {
-      'text': 'Chào bạn! Mình là trợ lý ảo của 5AE. Bạn đang tìm kiếm sản phẩm nào hay cần tư vấn gì ạ?',
+      'text': 'Chào bạn! Mình là trợ lý ảo của 5AE. Bạn đang tìm kiếm linh kiện nào (CPU, VGA, RAM...) hay cần tư vấn gì ạ?',
       'isUser': false,
-      'products': <Product>[] // Khởi tạo rỗng
+      'products': <Product>[]
     },
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _fetchProductsFromSupabase();
+  }
+
+  // Lấy dữ liệu thật từ Supabase về cho Bot học
+  Future<void> _fetchProductsFromSupabase() async {
+    try {
+      final data = await Supabase.instance.client
+          .from('sanpham')
+          .select('masp, tensp, gia, loaisanpham(tenloai), hinhanhsp(urlanh)');
+
+      if (mounted) {
+        setState(() {
+          _realProducts = (data as List).map((item) => Product.fromJson(item)).toList();
+          _isLoadingProducts = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Lỗi tải dữ liệu cho bot: $e');
+      if (mounted) {
+        setState(() => _isLoadingProducts = false);
+      }
+    }
+  }
+
   void _sendMessage() {
     if (_messageController.text.trim().isEmpty) return;
+    if (_isLoadingProducts) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bot đang học dữ liệu sản phẩm, vui lòng chờ 1 giây...')),
+      );
+      return;
+    }
 
     String userText = _messageController.text.trim();
 
@@ -61,54 +98,66 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ==========================================
-  // BỘ NÃO TÌM KIẾM SẢN PHẨM CỦA CHATBOT
+  // BỘ NÃO TÌM KIẾM SẢN PHẨM TỪ CSDL THẬT
   // ==========================================
   Map<String, dynamic> _getBotResponse(String input) {
     String lowerInput = input.toLowerCase();
 
-    // 1. KIỂM TRA XEM CÓ TÌM TÊN 1 SẢN PHẨM CỤ THỂ KHÔNG (Ví dụ: "iphone 15", "rog strix")
-    // Dùng độ dài > 3 để tránh việc gõ chữ "a", "đi" mà nó cũng tìm
-    if (lowerInput.length > 3) {
-      var exactMatches = mockProducts.where((p) => p.name.toLowerCase().contains(lowerInput)).toList();
+    // 1. TÌM THEO TÊN SẢN PHẨM (Ví dụ: "core i9", "rtx 4090")
+    if (lowerInput.length > 2) {
+      var exactMatches = _realProducts.where((p) => p.name.toLowerCase().contains(lowerInput)).toList();
 
-      if (exactMatches.isNotEmpty && exactMatches.length == 1) {
-        // Gợi ý thêm sản phẩm cùng hãng
-        var suggestions = mockProducts.where((p) => p.id != exactMatches.first.id && p.brand == exactMatches.first.brand).take(2).toList();
+      if (exactMatches.isNotEmpty) {
+        // Gợi ý thêm sản phẩm cùng danh mục nếu có thể
+        var suggestions = _realProducts.where((p) => p.id != exactMatches.first.id && p.brand == exactMatches.first.brand).take(2).toList();
         return {
-          'text': 'Dạ, đây là thông tin chi tiết của ${exactMatches.first.name} giá ${exactMatches.first.price}. \n\nSản phẩm này đang được bảo hành 12 tháng. Mình cũng gợi ý thêm vài mẫu cùng hãng cho bạn tham khảo nhé:',
+          'text': 'Dạ, mình tìm thấy các sản phẩm phù hợp với yêu cầu của bạn. Bạn tham khảo thông tin và giá bên dưới nhé:',
           'products': [exactMatches.first, ...suggestions]
         };
       }
     }
 
-    // 2. KIỂM TRA TỪ KHÓA DANH MỤC SẢN PHẨM
-    if (lowerInput.contains('laptop') || lowerInput.contains('máy tính')) {
-      // Ưu tiên hiển thị ngẫu nhiên hoặc lấy 5 sản phẩm đầu tiên làm "Bán chạy"
-      var laptops = mockProducts.where((p) => p.name.toLowerCase().contains('laptop') || p.name.toLowerCase().contains('macbook')).take(5).toList();
+    // 2. NHẬN DIỆN DANH MỤC LINH KIỆN
+    if (lowerInput.contains('cpu') || lowerInput.contains('vi xử lý') || lowerInput.contains('intel') || lowerInput.contains('ryzen')) {
+      var cpus = _realProducts.where((p) => p.name.toLowerCase().contains('cpu') || p.brand.toLowerCase().contains('cpu')).take(5).toList();
       return {
-        'text': 'Dạ, đây là Top các mẫu Laptop đang bán chạy nhất tại 5AE kèm cấu hình chi tiết ạ:',
-        'products': laptops
+        'text': 'Dạ, đây là các mẫu CPU (Vi xử lý) mạnh mẽ nhất đang có sẵn tại 5AE ạ:',
+        'products': cpus
       };
     }
-    else if (lowerInput.contains('điện thoại') || lowerInput.contains('smartphone') || lowerInput.contains('iphone')) {
-      var phones = mockProducts.where((p) => p.name.toLowerCase().contains('điện thoại') || p.name.toLowerCase().contains('iphone')).take(5).toList();
+    else if (lowerInput.contains('vga') || lowerInput.contains('card') || lowerInput.contains('rtx')) {
+      var vgas = _realProducts.where((p) => p.name.toLowerCase().contains('vga') || p.name.toLowerCase().contains('card') || p.brand.toLowerCase().contains('vga')).take(5).toList();
       return {
-        'text': 'Mình gửi bạn danh sách Điện thoại đang có ưu đãi tốt nhất hôm nay nhé:',
-        'products': phones
+        'text': 'Bạn đang build PC Gaming đúng không ạ? Mời bạn xem các dòng Card màn hình (VGA) siêu mượt này nhé:',
+        'products': vgas
+      };
+    }
+    else if (lowerInput.contains('ram') || lowerInput.contains('bộ nhớ')) {
+      var rams = _realProducts.where((p) => p.name.toLowerCase().contains('ram') || p.brand.toLowerCase().contains('ram')).take(5).toList();
+      return {
+        'text': 'Mình xin gửi danh sách RAM đang giảm giá. Bạn nên chọn thanh RAM có bus tương thích với Mainboard nhé:',
+        'products': rams
+      };
+    }
+    else if (lowerInput.contains('main') || lowerInput.contains('bo mạch')) {
+      var mains = _realProducts.where((p) => p.name.toLowerCase().contains('main') || p.brand.toLowerCase().contains('bo mạch')).take(5).toList();
+      return {
+        'text': 'Đây là các mẫu Mainboard (Bo mạch chủ) mới nhất, hỗ trợ tốt cho các dòng chip thế hệ mới:',
+        'products': mains
       };
     }
 
     // 3. CÁC TỪ KHÓA TƯ VẤN CHUNG
     if (lowerInput.contains('bảo hành') || lowerInput.contains('đổi trả')) {
-      return {'text': 'Tất cả sản phẩm tại 5AE đều được bảo hành chính hãng từ 12-24 tháng. Lỗi 1 đổi 1 trong vòng 30 ngày đầu tiên ạ.'};
+      return {'text': 'Tất cả linh kiện tại 5AE đều được bảo hành chính hãng từ 12-36 tháng. Lỗi 1 đổi 1 trong vòng 30 ngày đầu tiên ạ.'};
     } else if (lowerInput.contains('khuyến mãi') || lowerInput.contains('voucher')) {
-      return {'text': 'Hiện tại shop đang có mã giảm giá 50% cho thiết bị Gaming và Freeship mọi đơn. Bạn vào mục "Kho Voucher" để lấy mã nhé!'};
+      return {'text': 'Hiện tại shop đang có mã VIP15 giảm 15% cho đơn lớn. Bạn vào mục "Kho Voucher" để đổi điểm lấy mã nhé!'};
     }
 
-    // 4. TRẢ LỜI MẶC ĐỊNH KHI KHÔNG HIỂU
+    // 4. TRẢ LỜI MẶC ĐỊNH
     return {
-      'text': 'Dạ, thông tin này mình đã ghi nhận. Sẽ có nhân viên CSKH trực tiếp trả lời bạn trong ít phút nữa nhé. Trong lúc chờ, bạn xem qua các sản phẩm nổi bật của shop nha:',
-      'products': mockProducts.take(3).toList() // Đưa ra 3 sản phẩm random
+      'text': 'Dạ, yêu cầu này mình đã ghi nhận. Sẽ có nhân viên hỗ trợ trực tiếp cho bạn nhé. Trong lúc chờ, mời bạn xem qua các linh kiện nổi bật:',
+      'products': _realProducts.isNotEmpty ? _realProducts.take(3).toList() : [] // Đưa ra 3 sản phẩm đầu tiên
     };
   }
 
@@ -158,11 +207,20 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: TextField(
                       controller: _messageController,
                       style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(hintText: 'Nhập tên sản phẩm cần tìm...', hintStyle: TextStyle(color: Colors.grey[600]), border: InputBorder.none),
+                      decoration: InputDecoration(
+                          hintText: 'VD: Cần mua VGA RTX 4090...',
+                          hintStyle: TextStyle(color: Colors.grey[600]),
+                          border: InputBorder.none
+                      ),
                       onSubmitted: (_) => _sendMessage(),
                     ),
                   ),
-                  IconButton(icon: const Icon(Icons.send, color: Colors.redAccent), onPressed: _sendMessage),
+                  IconButton(
+                      icon: _isLoadingProducts
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.redAccent))
+                          : const Icon(Icons.send, color: Colors.redAccent),
+                      onPressed: _sendMessage
+                  ),
                 ],
               ),
             ),
@@ -178,14 +236,13 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildMessageBubble(Map<String, dynamic> msg) {
     bool isUser = msg['isUser'];
     String text = msg['text'];
-    List<Product>? products = msg['products'];
+    List<Product>? products = msg['products'] as List<Product>?;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Column(
         crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          // 1. Bong bóng chữ
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
@@ -201,11 +258,10 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
           ),
 
-          // 2. Nếu Bot có gửi kèm Sản phẩm thì hiển thị thanh trượt ngang
           if (products != null && products.isNotEmpty) ...[
             const SizedBox(height: 10),
             SizedBox(
-              height: 220, // Chiều cao thẻ sản phẩm trong chat
+              height: 220,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
@@ -222,7 +278,6 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // Giao diện Thẻ sản phẩm bên trong khung chat
   Widget _buildChatProductCard(Product product) {
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductDetailScreen(product: product))),

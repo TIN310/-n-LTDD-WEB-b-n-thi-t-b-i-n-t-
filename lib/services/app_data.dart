@@ -262,43 +262,63 @@ class AppData {
     appliedVoucherCode = '';
   }
 
+  // HÀM ĐÃ ĐƯỢC CẬP NHẬT ĐỂ ĐẨY LÊN SUPABASE
   static Future<void> processCheckout(
       String paymentMethod,
       String address,
       String note,
       ) async {
-    if (cart.isEmpty) return;
+    if (cart.isEmpty) throw Exception('Giỏ hàng trống!');
 
-    int subtotal = getCartSubtotal();
-    int shippingFee = getShippingFee();
-    int tierDiscountAmount = getTierDiscountAmount();
-    int voucherDiscountAmount = getVoucherDiscountAmount();
     int finalTotal = getFinalTotal();
     int earnedPoints = calculateEarnedPoints(finalTotal);
 
-    String newOrderId =
-        'ORD${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-
     final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
 
-    await supabase.from('don_hang').insert({
-      'ma_don_hang': newOrderId,
-      'tong_tien': subtotal,
-      'giam_gia': tierDiscountAmount + voucherDiscountAmount,
-      'phi_ship': shippingFee,
-      'thanh_tien': finalTotal,
-      'diem_thu_duoc': earnedPoints,
-      'trang_thai': 'Chờ xác nhận',
-      'phuong_thuc_tt': paymentMethod,
-      'dia_chi': address,
-      'ghi_chu': note,
-      'ngay_tao': DateTime.now().toIso8601String(),
-    });
+    if (user == null) {
+      throw Exception('Vui lòng đăng nhập để thanh toán!');
+    }
 
+    // 1. Lấy mã khách hàng (MaKH) dựa trên email đang đăng nhập
+    final userRecord = await supabase
+        .from('nguoidung')
+        .select('makh')
+        .eq('email', user.email!)
+        .single();
+
+    final int maKH = userRecord['makh'];
+
+    // 2. Lưu vào bảng HOADON trên Supabase
+    final hoadonResponse = await supabase.from('hoadon').insert({
+      'makh': maKH,
+      'tongtien': finalTotal,
+      'phuongthuctt': paymentMethod,
+      'diachigiaohang': address,
+      'trangthai': 'Đang chờ xử lý',
+    }).select('mahd').single();
+
+    final int maHD = hoadonResponse['mahd'];
+
+    // 3. Chuẩn bị danh sách sản phẩm để lưu vào CT_HOADON
+    final List<Map<String, dynamic>> dsChiTiet = cart.map((item) {
+      return {
+        'mahd': maHD,
+        'masp': int.parse(item.product.id),
+        'soluong': item.quantity,
+        'thanhtien': item.product.rawPrice * item.quantity,
+        'trangthaict': 'Chờ xác nhận'
+      };
+    }).toList();
+
+    // 4. Lưu toàn bộ chi tiết hóa đơn lên Supabase
+    await supabase.from('ct_hoadon').insert(dsChiTiet);
+
+    // 5. Cập nhật dữ liệu hiển thị (Lịch sử, điểm thưởng, voucher) trên App
     history.insert(
       0,
       OrderData(
-        orderId: newOrderId,
+        orderId: maHD.toString(),
         items: List<CartItem>.from(cart),
         totalAmount: finalTotal,
         earnedPoints: earnedPoints,
@@ -318,6 +338,7 @@ class AppData {
       }
     }
 
+    // 6. Xóa giỏ hàng sau khi đặt thành công
     cart.clear();
     removeVoucher();
   }
