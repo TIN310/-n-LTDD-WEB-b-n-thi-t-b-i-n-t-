@@ -150,7 +150,7 @@ class _StaffHomeTabState extends State<_StaffHomeTab> {
                   IconButton(
                     icon: const Icon(Icons.notifications_outlined,
                         color: Colors.white),
-                    onPressed: () {},
+                    onPressed: () => _showNotificationSheet(context, pendingOrdersList),
                   ),
                   if (pendingOrders > 0)
                     Positioned(
@@ -308,7 +308,8 @@ class _StaffHomeTabState extends State<_StaffHomeTab> {
                   children: [
                     const _SectionHeader(title: 'Đơn cần xử lý'),
                     TextButton(
-                      onPressed: () {},
+                      onPressed: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const _StaffInventoryTab())),
                       child: const Text('Xem tất cả',
                           style: TextStyle(
                               color: Colors.redAccent, fontSize: 13)),
@@ -338,7 +339,8 @@ class _StaffHomeTabState extends State<_StaffHomeTab> {
                         icon: Icons.inventory_2_outlined,
                         label: 'Kiểm kê kho',
                         color: Colors.indigo,
-                        onTap: () => _showComingSoon(context),
+                        onTap: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const _StaffInventoryTab())),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -430,9 +432,87 @@ class _StaffHomeTabState extends State<_StaffHomeTab> {
         content: const Text('Tính năng đang phát triển'),
         backgroundColor: Colors.grey[800],
         behavior: SnackBarBehavior.floating,
-        shape:
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
+    );
+  }
+
+  void _showNotificationSheet(BuildContext context, List<Map<String, dynamic>> pendingOrders) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.notifications_active, color: Colors.redAccent),
+                  const SizedBox(width: 8),
+                  const Text('Thông báo',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  if (pendingOrders.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text('${pendingOrders.length} chờ xử lý',
+                          style: const TextStyle(color: Colors.white, fontSize: 12)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (pendingOrders.isEmpty)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        Icon(Icons.check_circle_outline, color: Colors.greenAccent, size: 40),
+                        SizedBox(height: 8),
+                        Text('Không có thông báo mới',
+                            style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ...pendingOrders.take(5).map((order) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.shopping_bag_outlined, color: Colors.orange, size: 20),
+                  ),
+                  title: Text(
+                    'Đơn hàng ${order['id'] ?? ''}',
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: const Text('Đang chờ xác nhận',
+                      style: TextStyle(color: Colors.orange, fontSize: 12)),
+                  trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 14),
+                )),
+            ],
+          ),
+        );
+      },
     );
   }
 }

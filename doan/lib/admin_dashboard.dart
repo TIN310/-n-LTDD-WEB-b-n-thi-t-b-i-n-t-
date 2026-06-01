@@ -102,19 +102,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
 class _AdminHomeTab extends StatelessWidget {
   const _AdminHomeTab();
 
-  // Mock tính doanh thu từ history
-  int get _totalRevenue =>
-      AppData.history.fold(0, (sum, o) => sum + o.totalAmount);
-
-  int get _pendingCount =>
-      AppData.history.where((o) => o.status == 'Chờ xác nhận').length;
-
-  int get _completedCount =>
-      AppData.history.where((o) => o.status == 'Đã giao thành công').length;
-
-  int get _cancelledCount =>
-      AppData.history.where((o) => o.status == 'Đã hủy').length;
-
   String _formatCurrency(int amount) {
     if (amount >= 1000000) {
       double m = amount / 1000000;
@@ -127,6 +114,97 @@ class _AdminHomeTab extends StatelessWidget {
         + ' đ';
   }
 
+  void _showNotificationSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return FutureBuilder<List<Map<String, dynamic>>>(
+          future: Supabase.instance.client
+              .from('orders')
+              .select('id, total_price, status')
+              .eq('status', 'Chờ xác nhận')
+              .order('created_at', ascending: false)
+              .limit(5),
+          builder: (context, snapshot) {
+            final pendingOrders = snapshot.data ?? [];
+            final pendingCount = pendingOrders.length;
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.notifications_active, color: Colors.redAccent),
+                      const SizedBox(width: 8),
+                      const Text('Thông báo Admin',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Spacer(),
+                      if (pendingCount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text('$pendingCount chờ duyệt',
+                              style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    const Center(child: CircularProgressIndicator(color: Colors.redAccent))
+                  else if (pendingOrders.isEmpty)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            Icon(Icons.check_circle_outline, color: Colors.greenAccent, size: 40),
+                            SizedBox(height: 8),
+                            Text('Không có đơn hàng chờ duyệt',
+                                style: TextStyle(color: Colors.grey)),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ...pendingOrders.map((order) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.shopping_bag_outlined, color: Colors.orange, size: 20),
+                      ),
+                      title: Text(
+                        'Đơn hàng ${order['id'] ?? ''}',
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${_formatCurrency(((order['total_price'] ?? 0) as num).toInt())} • Chờ xác nhận',
+                        style: const TextStyle(color: Colors.orange, fontSize: 12),
+                      ),
+                      trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 14),
+                    )),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
   @override
   Widget build(BuildContext context) {
     final adminEmail =
@@ -159,7 +237,7 @@ class _AdminHomeTab extends StatelessWidget {
           IconButton(
             icon:
             const Icon(Icons.notifications_outlined, color: Colors.white),
-            onPressed: () {},
+            onPressed: () => _showNotificationSheet(context),
           ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -180,176 +258,221 @@ class _AdminHomeTab extends StatelessWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ---- CARD DOANH THU NỔI BẬT ----
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF8B0000), Color(0xFFE53935)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.red.withOpacity(0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Tổng doanh thu',
-                        style: TextStyle(
-                            color: Colors.white70, fontSize: 14),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'Tất cả thời gian',
-                          style: TextStyle(
-                              color: Colors.white, fontSize: 11),
-                        ),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: Supabase.instance.client
+            .from('orders')
+            .stream(primaryKey: ['id'])
+            .order('created_at', ascending: false),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Lỗi tải dữ liệu: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent)));
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator(color: Colors.redAccent));
+          }
+
+          final orders = snapshot.data!;
+          int totalRevenue = 0;
+          int pendingCount = 0;
+          int completedCount = 0;
+          int cancelledCount = 0;
+
+          for (var order in orders) {
+            final status = order['status'];
+            if (status == 'Chờ xác nhận') pendingCount++;
+            if (status == 'Đã giao thành công') {
+              completedCount++;
+              totalRevenue += ((order['total_price'] ?? 0) as num).toInt();
+            }
+            if (status == 'Đã hủy') cancelledCount++;
+          }
+
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ---- CARD DOANH THU NỔI BẬT ----
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF8B0000), Color(0xFFE53935)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _formatCurrency(_totalRevenue),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 36,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Tổng doanh thu',
+                            style: TextStyle(
+                                color: Colors.white70, fontSize: 14),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'Tất cả thời gian',
+                              style: TextStyle(
+                                  color: Colors.white, fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _formatCurrency(totalRevenue),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${orders.length} đơn hàng tổng cộng',
+                        style: const TextStyle(
+                            color: Colors.white60, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // ---- THỐNG KÊ 2x2 ----
+                const _AdminSectionHeader(title: 'Thống kê đơn hàng'),
+                const SizedBox(height: 12),
+                GridView.count(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1.4,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _AdminStatCard(
+                      title: 'Tổng đơn',
+                      value: '${orders.length}',
+                      icon: Icons.shopping_bag_outlined,
+                      color: Colors.blueAccent,
+                      trend: '+12%',
+                      trendUp: true,
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${AppData.history.length} đơn hàng tổng cộng',
-                    style: const TextStyle(
-                        color: Colors.white60, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
+                    _AdminStatCard(
+                      title: 'Chờ xác nhận',
+                      value: '$pendingCount',
+                      icon: Icons.pending_actions_outlined,
+                      color: Colors.orange,
+                    ),
+                    _AdminStatCard(
+                      title: 'Hoàn thành',
+                      value: '$completedCount',
+                      icon: Icons.check_circle_outline,
+                      color: Colors.greenAccent,
+                      trend: '+5%',
+                      trendUp: true,
+                    ),
+                    _AdminStatCard(
+                      title: 'Đã hủy',
+                      value: '$cancelledCount',
+                      icon: Icons.cancel_outlined,
+                      color: Colors.redAccent,
+                      trend: '-2%',
+                      trendUp: false,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
 
-            // ---- THỐNG KÊ 2x2 ----
-            const _AdminSectionHeader(title: 'Thống kê đơn hàng'),
-            const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.4,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _AdminStatCard(
-                  title: 'Tổng đơn',
-                  value: '${AppData.history.length}',
-                  icon: Icons.shopping_bag_outlined,
-                  color: Colors.blueAccent,
-                  trend: '+12%',
-                  trendUp: true,
+                // ---- BIỂU ĐỒ DOANH THU (MOCK BAR CHART) ----
+                const _AdminSectionHeader(title: 'Doanh thu 7 ngày qua'),
+                const SizedBox(height: 12),
+                _RevenueBarChart(),
+                const SizedBox(height: 24),
+
+                // ---- TOP SẢN PHẨM BÁN CHẠY ----
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const _AdminSectionHeader(title: 'Sản phẩm bán chạy'),
+                    TextButton(
+                      onPressed: () {},
+                      child: const Text('Xem tất cả',
+                          style: TextStyle(
+                              color: Colors.redAccent, fontSize: 13)),
+                    ),
+                  ],
                 ),
-                _AdminStatCard(
-                  title: 'Chờ xác nhận',
-                  value: '$_pendingCount',
-                  icon: Icons.pending_actions_outlined,
-                  color: Colors.orange,
+                const SizedBox(height: 8),
+                ...mockProducts
+                    .take(3)
+                    .toList()
+                    .asMap()
+                    .entries
+                    .map((entry) => _TopProductRow(
+                  rank: entry.key + 1,
+                  product: entry.value,
+                )),
+                const SizedBox(height: 24),
+
+                // ---- ĐƠN HÀNG GẦN NHẤT ----
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const _AdminSectionHeader(title: 'Đơn hàng gần đây'),
+                    TextButton(
+                      onPressed: () {},
+                      child: const Text('Xem tất cả',
+                          style: TextStyle(
+                              color: Colors.redAccent, fontSize: 13)),
+                    ),
+                  ],
                 ),
-                _AdminStatCard(
-                  title: 'Hoàn thành',
-                  value: '$_completedCount',
-                  icon: Icons.check_circle_outline,
-                  color: Colors.greenAccent,
-                  trend: '+5%',
-                  trendUp: true,
-                ),
-                _AdminStatCard(
-                  title: 'Đã hủy',
-                  value: '$_cancelledCount',
-                  icon: Icons.cancel_outlined,
-                  color: Colors.redAccent,
-                  trend: '-2%',
-                  trendUp: false,
-                ),
+                const SizedBox(height: 8),
+                if (orders.isEmpty)
+                  _buildEmptyState('Chưa có đơn hàng nào')
+                else
+                  ...orders.take(5).map((o) {
+                    final priceVal = o['total_price'] ?? 0;
+                    final priceNum = priceVal is num ? priceVal.toInt() : int.tryParse(priceVal.toString()) ?? 0;
+                    final orderIdStr = o['id'].toString();
+                    
+                    final order = OrderData(
+                      orderId: orderIdStr.length > 8 ? orderIdStr.substring(0, 8).toUpperCase() : orderIdStr.toUpperCase(),
+                      items: [], 
+                      totalAmount: priceNum,
+                      earnedPoints: 0,
+                      status: o['status'] ?? 'Chờ xác nhận',
+                      paymentMethod: 'Thanh toán trực tuyến / COD',
+                      address: 'Địa chỉ nhận hàng (Cập nhật sau)',
+                      note: '',
+                    );
+                    return _AdminOrderRow(order: order);
+                  }),
               ],
             ),
-            const SizedBox(height: 24),
-
-            // ---- BIỂU ĐỒ DOANH THU (MOCK BAR CHART) ----
-            const _AdminSectionHeader(title: 'Doanh thu 7 ngày qua'),
-            const SizedBox(height: 12),
-            _RevenueBarChart(),
-            const SizedBox(height: 24),
-
-            // ---- TOP SẢN PHẨM BÁN CHẠY ----
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const _AdminSectionHeader(title: 'Sản phẩm bán chạy'),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('Xem tất cả',
-                      style: TextStyle(
-                          color: Colors.redAccent, fontSize: 13)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...mockProducts
-                .take(3)
-                .toList()
-                .asMap()
-                .entries
-                .map((entry) => _TopProductRow(
-              rank: entry.key + 1,
-              product: entry.value,
-            )),
-            const SizedBox(height: 24),
-
-            // ---- ĐƠN HÀNG GẦN NHẤT ----
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const _AdminSectionHeader(title: 'Đơn hàng gần đây'),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('Xem tất cả',
-                      style: TextStyle(
-                          color: Colors.redAccent, fontSize: 13)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (AppData.history.isEmpty)
-              _buildEmptyState('Chưa có đơn hàng nào')
-            else
-              ...AppData.history
-                  .take(5)
-                  .map((o) => _AdminOrderRow(order: o)),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -461,29 +584,68 @@ class _AdminOrdersTabState extends State<_AdminOrdersTab>
               .toList(),
         ),
       ),
-      body: _filteredOrders.isEmpty
-          ? Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.receipt_long_outlined,
-                size: 72, color: Colors.grey[800]),
-            const SizedBox(height: 16),
-            Text('Không có đơn hàng',
-                style: TextStyle(
-                    color: Colors.grey[600], fontSize: 16)),
-          ],
-        ),
-      )
-          : ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
-        physics: const BouncingScrollPhysics(),
-        itemCount: _filteredOrders.length,
-        itemBuilder: (context, index) {
-          final order = _filteredOrders[index];
-          return _AdminFullOrderCard(
-            order: order,
-            onStatusChanged: () => setState(() {}),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: Supabase.instance.client
+            .from('orders')
+            .stream(primaryKey: ['id'])
+            .order('created_at', ascending: false),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Lỗi tải dữ liệu: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent)),
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator(color: Colors.redAccent));
+          }
+
+          final allOrders = snapshot.data!;
+          final filteredOrders = _filterStatus == 'Tất cả'
+              ? allOrders
+              : allOrders.where((o) => o['status'] == _filterStatus).toList();
+
+          if (filteredOrders.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.receipt_long_outlined,
+                      size: 72, color: Colors.grey[800]),
+                  const SizedBox(height: 16),
+                  Text('Không có đơn hàng',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
+            physics: const BouncingScrollPhysics(),
+            itemCount: filteredOrders.length,
+            itemBuilder: (context, index) {
+              final o = filteredOrders[index];
+              final priceVal = o['total_price'] ?? 0;
+              final priceNum = priceVal is num ? priceVal.toInt() : int.tryParse(priceVal.toString()) ?? 0;
+              final orderIdStr = o['id'].toString();
+
+              final order = OrderData(
+                orderId: orderIdStr.length > 8 ? orderIdStr.substring(0, 8).toUpperCase() : orderIdStr.toUpperCase(),
+                items: [],
+                totalAmount: priceNum,
+                earnedPoints: 0,
+                status: o['status'] ?? 'Chờ xác nhận',
+                paymentMethod: 'Thanh toán trực tuyến / COD',
+                address: 'Địa chỉ nhận hàng (Cập nhật sau)',
+                note: '',
+              );
+
+              return _AdminFullOrderCard(
+                order: order,
+                orderIdDb: orderIdStr, // Truyền ID thực để cập nhật DB
+                onStatusChanged: () {},
+              );
+            },
           );
         },
       ),
@@ -505,12 +667,6 @@ class _AdminProductsTab extends StatefulWidget {
 
 class _AdminProductsTabState extends State<_AdminProductsTab> {
   String _searchQuery = '';
-
-  List<Product> get _filteredProducts => mockProducts
-      .where((p) =>
-  p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-      p.brand.toLowerCase().contains(_searchQuery.toLowerCase()))
-      .toList();
 
   @override
   Widget build(BuildContext context) {
@@ -570,36 +726,69 @@ class _AdminProductsTabState extends State<_AdminProductsTab> {
           ),
           const SizedBox(height: 8),
 
-          // Tổng số sản phẩm
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Text(
-                  '${_filteredProducts.length} sản phẩm',
-                  style: TextStyle(
-                      color: Colors.grey[500], fontSize: 13),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-
           // Danh sách
           Expanded(
-            child: ListView.builder(
-              padding:
-              const EdgeInsets.fromLTRB(16, 0, 16, 100),
-              physics: const BouncingScrollPhysics(),
-              itemCount: _filteredProducts.length,
-              itemBuilder: (context, index) {
-                final product = _filteredProducts[index];
-                return _AdminProductCard(
-                  product: product,
-                  onEdit: () =>
-                      _showAddEditProductSheet(context, product),
-                  onDelete: () =>
-                      _confirmDeleteProduct(context, product),
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: Supabase.instance.client.from('products').stream(primaryKey: ['id']),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(child: Text('Lỗi tải dữ liệu', style: TextStyle(color: Colors.redAccent)));
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator(color: Colors.redAccent));
+                }
+
+                final allProducts = snapshot.data!;
+                final filtered = allProducts.where((p) {
+                  final name = (p['name'] as String? ?? '').toLowerCase();
+                  final brand = (p['brand'] as String? ?? '').toLowerCase();
+                  final query = _searchQuery.toLowerCase();
+                  return name.contains(query) || brand.contains(query);
+                }).toList();
+
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Text(
+                            '${filtered.length} sản phẩm',
+                            style: TextStyle(
+                                color: Colors.grey[500], fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final p = filtered[index];
+                          final priceVal = p['price'] ?? 0;
+                          final priceNum = priceVal is num ? priceVal.toInt() : int.tryParse(priceVal.toString()) ?? 0;
+                          
+                          final product = Product(
+                            id: p['id'].toString(),
+                            name: p['name'] ?? 'Không tên',
+                            price: '${priceNum.toString().replaceAllMapped(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), (match) => '.')} đ',
+                            rawPrice: priceNum,
+                            brand: p['brand'] ?? 'Khác',
+                            imageUrl: p['image_url'] ?? '',
+                          );
+
+                          return _AdminProductCard(
+                            product: product,
+                            onEdit: () => _showAddEditProductSheet(context, product),
+                            onDelete: () => _confirmDeleteProduct(context, product),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
@@ -692,22 +881,50 @@ class _AdminProductsTabState extends State<_AdminProductsTab> {
                       padding:
                       const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    onPressed: () {
-                      // TODO: Gọi Supabase để lưu
-                      Navigator.pop(context);
-                      setState(() {});
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(isEdit
-                              ? 'Đã cập nhật sản phẩm'
-                              : 'Đã thêm sản phẩm mới'),
-                          backgroundColor: Colors.green,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                              borderRadius:
-                              BorderRadius.circular(12)),
-                        ),
-                      );
+                    onPressed: () async {
+                      final name = nameCtrl.text.trim();
+                      final brand = brandCtrl.text.trim();
+                      final price = int.tryParse(priceCtrl.text) ?? 0;
+                      final imageUrl = imageCtrl.text.trim();
+
+                      if (name.isEmpty || price == 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vui lòng nhập tên và giá hợp lệ')));
+                        return;
+                      }
+
+                      try {
+                        if (isEdit) {
+                          await Supabase.instance.client.from('products').update({
+                            'name': name,
+                            'brand': brand,
+                            'price': price,
+                            'image_url': imageUrl,
+                          }).eq('id', product.id);
+                        } else {
+                          await Supabase.instance.client.from('products').insert({
+                            'name': name,
+                            'brand': brand,
+                            'price': price,
+                            'image_url': imageUrl,
+                            'stock': 100, // Default stock
+                          });
+                        }
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(isEdit ? 'Đã cập nhật sản phẩm' : 'Đã thêm sản phẩm mới'),
+                              backgroundColor: Colors.green,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+                        }
+                      }
                     },
                     child: Text(
                       isEdit ? 'Lưu thay đổi' : 'Thêm mới',
@@ -773,22 +990,29 @@ class _AdminProductsTabState extends State<_AdminProductsTab> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.redAccent),
-            onPressed: () {
-              // TODO: Xóa trên Supabase
-              Navigator.pop(context);
-              setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Đã xóa sản phẩm'),
-                  backgroundColor: Colors.grey[800],
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-              );
+            onPressed: () async {
+              try {
+                await Supabase.instance.client.from('products').delete().eq('id', product.id);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Đã xóa ${product.name}'),
+                      backgroundColor: Colors.redAccent,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi xóa sản phẩm: $e')));
+                }
+              }
             },
             child: const Text('Xóa',
-                style: TextStyle(color: Colors.white)),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -1085,33 +1309,6 @@ class _AdminSettingsTab extends StatefulWidget {
 }
 
 class _AdminSettingsTabState extends State<_AdminSettingsTab> {
-  // Mock vouchers
-  final List<Map<String, dynamic>> _vouchers = [
-    {
-      'code': 'GAMING50',
-      'discount': '50%',
-      'desc': 'Thiết bị Gaming',
-      'uses': 34,
-      'maxUses': 100,
-      'active': true,
-    },
-    {
-      'code': 'FREESHIP',
-      'discount': 'Freeship',
-      'desc': 'Cho đơn từ 300K',
-      'uses': 87,
-      'maxUses': 200,
-      'active': true,
-    },
-    {
-      'code': 'VIP10',
-      'discount': '10%',
-      'desc': 'Dành riêng VIP',
-      'uses': 12,
-      'maxUses': 50,
-      'active': false,
-    },
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -1157,14 +1354,78 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
               ],
             ),
             const SizedBox(height: 12),
-            ..._vouchers
-                .map((v) => _AdminVoucherCard(
-              voucher: v,
-              onToggle: () =>
-                  setState(() => v['active'] = !v['active']),
-              onDelete: () =>
-                  setState(() => _vouchers.remove(v)),
-            )),
+            StreamBuilder<List<Map<String, dynamic>>>(
+              stream: Supabase.instance.client.from('vouchers').stream(primaryKey: ['code']),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                    ),
+                    child: const Text(
+                      'Bảng "vouchers" chưa tồn tại trên Supabase. Vui lòng tạo bảng với các cột: code (PK), discount, desc, uses, max_uses, active.',
+                      style: TextStyle(color: Colors.redAccent, fontSize: 13),
+                    ),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator(color: Colors.redAccent));
+                }
+
+                final vouchers = snapshot.data!;
+                if (vouchers.isEmpty) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Text('Chưa có voucher nào', style: TextStyle(color: Colors.grey)),
+                    ),
+                  );
+                }
+
+                return Column(
+                  children: vouchers.map((vRow) {
+                    final v = {
+                      'code': vRow['code'] ?? '',
+                      'discount': vRow['discount'] ?? '',
+                      'desc': vRow['desc'] ?? '',
+                      'uses': vRow['uses'] ?? 0,
+                      'maxUses': vRow['max_uses'] ?? 0,
+                      'active': vRow['active'] ?? false,
+                    };
+                    return _AdminVoucherCard(
+                      voucher: v,
+                      onToggle: () async {
+                        try {
+                          await Supabase.instance.client
+                              .from('vouchers')
+                              .update({'active': !v['active']})
+                              .eq('code', v['code']);
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+                          }
+                        }
+                      },
+                      onDelete: () async {
+                        try {
+                          await Supabase.instance.client
+                              .from('vouchers')
+                              .delete()
+                              .eq('code', v['code']);
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+                          }
+                        }
+                      },
+                    );
+                  }).toList(),
+                );
+              },
+            ),
             const SizedBox(height: 24),
 
             // ---- CÀI ĐẶT CỬA HÀNG ----
@@ -1355,30 +1616,42 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
                       borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                onPressed: () {
+                onPressed: () async {
                   if (codeCtrl.text.trim().isNotEmpty) {
-                    setState(() {
-                      _vouchers.add({
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                    }
+                    try {
+                      await Supabase.instance.client.from('vouchers').insert({
                         'code': codeCtrl.text.trim().toUpperCase(),
                         'discount': discountCtrl.text.trim(),
                         'desc': descCtrl.text.trim(),
                         'uses': 0,
-                        'maxUses':
-                        int.tryParse(maxUsesCtrl.text) ?? 100,
+                        'max_uses': int.tryParse(maxUsesCtrl.text) ?? 100,
                         'active': true,
                       });
-                    });
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text('Đã tạo voucher mới'),
-                        backgroundColor: Colors.green,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                            borderRadius:
-                            BorderRadius.circular(12)),
-                      ),
-                    );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Đã tạo voucher mới'),
+                            backgroundColor: Colors.green,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Lỗi tạo voucher (Có thể bảng chưa tồn tại): $e'),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      }
+                    }
                   }
                 },
                 child: const Text('Tạo Voucher',
@@ -1759,10 +2032,12 @@ class _AdminOrderRow extends StatelessWidget {
 class _AdminFullOrderCard extends StatelessWidget {
   final OrderData order;
   final VoidCallback onStatusChanged;
+  final String? orderIdDb;
 
   const _AdminFullOrderCard({
     required this.order,
     required this.onStatusChanged,
+    this.orderIdDb,
   });
 
   Color _statusColor(String status) {
@@ -1860,17 +2135,17 @@ class _AdminFullOrderCard extends StatelessWidget {
                       icon: const Icon(Icons.cancel_outlined, size: 16),
                       label: const Text('Hủy đơn',
                           style: TextStyle(fontSize: 12)),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Đã hủy ${order.orderId}'),
-                            backgroundColor: Colors.redAccent,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                                borderRadius:
-                                BorderRadius.circular(12)),
-                          ),
-                        );
+                      onPressed: () async {
+                        if (orderIdDb != null) {
+                          try {
+                            await Supabase.instance.client
+                                .from('orders')
+                                .update({'status': 'Đã hủy'})
+                                .eq('id', orderIdDb!);
+                          } catch (e) {
+                            debugPrint('Error: $e');
+                          }
+                        }
                         onStatusChanged();
                       },
                     ),
@@ -1894,18 +2169,20 @@ class _AdminFullOrderCard extends StatelessWidget {
                         style: const TextStyle(
                             color: Colors.white, fontSize: 12),
                       ),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content:
-                            Text('Đã cập nhật ${order.orderId}'),
-                            backgroundColor: Colors.green,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                                borderRadius:
-                                BorderRadius.circular(12)),
-                          ),
-                        );
+                      onPressed: () async {
+                        String nextStatus = order.status == 'Chờ xác nhận'
+                            ? 'Đang giao'
+                            : 'Đã giao thành công';
+                        if (orderIdDb != null) {
+                          try {
+                            await Supabase.instance.client
+                                .from('orders')
+                                .update({'status': nextStatus})
+                                .eq('id', orderIdDb!);
+                          } catch (e) {
+                            debugPrint('Error: $e');
+                          }
+                        }
                         onStatusChanged();
                       },
                     ),

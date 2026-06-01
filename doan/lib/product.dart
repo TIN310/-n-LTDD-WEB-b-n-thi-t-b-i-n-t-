@@ -90,7 +90,6 @@ class AppData {
     return 0.0;
   }
 
-  // ĐÃ SỬA: Tính toán tiền ship 30k cứng và trừ thêm Voucher + Gửi lên Supabase
   static Future<void> processCheckout(String paymentMethod, String address, String note) async {
     if (cart.isEmpty) return;
 
@@ -102,12 +101,50 @@ class AppData {
 
     // Thành tiền = Tạm tính - Ưu đãi hạng - Voucher + Phí Ship
     int finalTotal = subtotal - tierDiscountAmount - voucherDiscountAmount + shippingFee;
-
     int earnedPoints = ((finalTotal / 10000).floor() * tierMultiplier).round();
-    final orderId = 'ORD${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
+    String finalOrderId = 'ORD${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      
+      // Tạo một Map dữ liệu để insert, bỏ qua trường id để Supabase tự sinh (nếu id là UUID)
+      final insertData = {
+        'status': 'Chờ xác nhận',
+        'total_price': finalTotal,
+        'created_at': DateTime.now().toIso8601String(),
+      };
+      
+      // Nếu có user đăng nhập thì mới gửi user_id (tránh gửi 'guest' vào cột UUID)
+      if (user != null) {
+        insertData['user_id'] = user.id;
+      }
+
+      // Đẩy lên Supabase và lấy về id do DB tự tạo
+      final response = await Supabase.instance.client
+          .from('orders')
+          .insert(insertData)
+          .select('id')
+          .single();
+
+      finalOrderId = response['id'].toString();
+
+      // (Tùy chọn) Lưu order_items nếu DB có bảng này
+      for (var item in cart) {
+        await Supabase.instance.client.from('order_items').insert({
+          'order_id': finalOrderId,
+          'product_id': item.product.id,
+          'quantity': item.quantity,
+          'price': item.product.rawPrice,
+        });
+      }
+    } catch (e) {
+      debugPrint('Lỗi lưu đơn hàng lên Supabase: $e');
+    }
+
+    // Sau khi insert thành công, lưu vào lịch sử cục bộ để hiển thị cho Khách hàng
     history.insert(0, OrderData(
-      orderId: orderId,
+      orderId: finalOrderId,
       items: List.from(cart),
       totalAmount: finalTotal,
       earnedPoints: earnedPoints,
@@ -116,18 +153,6 @@ class AppData {
       address: address,
       note: note,
     ));
-
-    try {
-      await Supabase.instance.client.from('orders').insert({
-        'id': orderId,
-        'user_id': Supabase.instance.client.auth.currentUser?.id ?? 'guest',
-        'status': 'Chờ xác nhận',
-        'total_price': finalTotal,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      debugPrint('Lỗi lưu đơn hàng lên Supabase: $e');
-    }
 
     currentPoints += earnedPoints;
     lifetimePoints += earnedPoints;
